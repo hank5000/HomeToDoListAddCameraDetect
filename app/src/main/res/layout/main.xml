@@ -1,32 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="fill_parent"
-    android:layout_height="fill_parent"
-    android:orientation="horizontal"
-    android:keepScreenOn="true">
-
-    <SurfaceView xmlns:android="http://schemas.android.com/apk/res/android"
-        android:id="@+id/preview"
-        android:layout_width="100px"
-        android:layout_height="100px"
-        />
+    android:layout_height="fill_parent">
 
     <LinearLayout
-        android:id="@+id/list"
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
-        android:orientation="vertical"
-        android:layout_weight="1">
+        android:orientation="horizontal"
+        android:keepScreenOn="true">
 
-        <!--<Button android:id="@+id/connect"-->
-            <!--android:layout_height="wrap_content"-->
-            <!--android:layout_width="wrap_content"-->
-            <!--android:text="Connect"/>-->
-        <!--<TextView android:id="@+id/tv"-->
-            <!--android:layout_height="wrap_content"-->
-            <!--android:layout_width="wrap_content"/>-->
+        <SurfaceView xmlns:android="http://schemas.android.com/apk/res/android"
+            android:id="@+id/preview"
+            android:layout_width="100px"
+            android:layout_height="100px"
+            />
+
+        <LinearLayout
+            android:id="@+id/list"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:orientation="vertical"
+            android:layout_weight="1">
+
+            <!--<Button android:id="@+id/connect"-->
+                <!--android:layout_height="wrap_content"-->
+                <!--android:layout_width="wrap_content"-->
+                <!--android:text="Connect"/>-->
+            <!--<TextView android:id="@+id/tv"-->
+                <!--android:layout_height="wrap_content"-->
+                <!--android:layout_width="wrap_content"/>-->
+
+        </LinearLayout>
+
 
     </LinearLayout>
 
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentRight="true"
+        android:text="Menu"
+        android:id="@+id/menu"
+        android:layout_alignStart="@id/menu" />
 
-    </LinearLayout>
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+
+        android:text="Choose Account"
+        android:id="@+id/account"
+        android:layout_alignParentEnd="false"
+        android:layout_alignParentTop="false"
+        android:layout_alignParentLeft="false"
+        android:layout_alignParentStart="false"
+        android:layout_alignParentBottom="false"
+        android:layout_alignParentRight="false"
+        android:layout_alignWithParentIfMissing="false"
+        android:layout_alignLeft="@id/menu"
+        android:layout_above="@id/menu" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+
+        android:text="Camera"
+        android:id="@+id/Camera"
+        android:layout_alignParentEnd="false"
+        android:layout_alignParentTop="false"
+        android:layout_alignParentLeft="false"
+        android:layout_alignParentStart="false"
+        android:layout_alignParentBottom="false"
+        android:layout_alignParentRight="false"
+        android:layout_alignWithParentIfMissing="false"
+        android:layout_alignLeft="@id/account"
+        android:layout_above="@id/account" />
+
+
+
+</RelativeLayout>

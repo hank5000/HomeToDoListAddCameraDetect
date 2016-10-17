@@ -13,9 +13,6 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Environment;
-import android.os.Handler;
-import android.os.HandlerThread;
 import android.speech.tts.TextToSpeech;
 import android.support.annotation.NonNull;
 import android.text.TextUtils;
@@ -70,6 +67,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     private static BrightnessController brightnessController = null;
     private static volatile AtomicBoolean processing = new AtomicBoolean(false);
     private static TextToSpeech tts = null;
+    private boolean bEnableCamera = false;
 
     GoogleAccountCredential mCredential;
     static final int REQUEST_ACCOUNT_PICKER = 1000;
@@ -79,7 +77,10 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     private static final String PREF_ACCOUNT_NAME = "accountName";
     private static final String[] SCOPES = { SheetsScopes.SPREADSHEETS_READONLY };
 
-    private Button connectBtn = null;
+    private Button menuBtn = null;
+    private Button accountBtn = null;
+    private Button cameraStart = null;
+
     private TextView tv = null;
 
     private LinearLayout ll = null;
@@ -124,29 +125,68 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
 
         tv = new TextView(this);
 
-        if(accountName!=null) {
-            TextView textView = new TextView(this);
-            ll.addView(textView);
+//        if(accountName!=null) {
+//            TextView textView = new TextView(this);
+//            ll.addView(textView);
+//
+//            textView.setText("Connect to "+accountName);
+//            mCredential.setSelectedAccountName(accountName);
+//            new MakeRequestTask(mCredential).execute();
+//        } else {
+//            connectBtn = new Button(this);
+//            connectBtn.setOnClickListener(new View.OnClickListener() {
+//                @Override
+//                public void onClick(View v) {
+//                    connectServiceAndChooseAccount();
+//                }
+//            });
+//            ll.addView(connectBtn);
+//        }
 
-            textView.setText("Connect to "+accountName);
-            mCredential.setSelectedAccountName(accountName);
-            new MakeRequestTask(mCredential).execute();
-        } else {
-            connectBtn = new Button(this);
-            connectBtn.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    connectServiceAndChooseAcount();
+
+        accountBtn = (Button) findViewById(R.id.account);
+        accountBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                connectServiceAndChooseAccount();
+            }
+        });
+
+        cameraStart = (Button) findViewById(R.id.Camera);
+        cameraStart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                camera = Camera.open(0);
+                camera.setPreviewCallback(previewCallback);
+                try {
+                    camera.setPreviewDisplay(previewHolder);
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-            });
-            ll.addView(connectBtn);
-        }
+                Camera.Parameters p = camera.getParameters();
+                p.setPreviewSize(640,480);
+                camera.setParameters(p);
+                camera.startPreview();
+            }
+        });
+
+        menuBtn = (Button) findViewById(R.id.menu);
+        menuBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new MakeRequestTask(mCredential).execute();
+            }
+        });
+
+
+
         ll.addView(tv);
 
 //        tv = (TextView) findViewById(R.id.tv);
 
-
-        camera = Camera.open(0);
+        if(bEnableCamera) {
+            camera = Camera.open(0);
+        }
         tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             @Override
             public void onInit(int status) {
@@ -168,8 +208,8 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
      * of the preconditions are not satisfied, the app will prompt the user as
      * appropriate.
      */
-    private void connectServiceAndChooseAcount() {
-        Log.d("HANK","connectServiceAndChooseAcount");
+    private void connectServiceAndChooseAccount() {
+        Log.d("HANK","connectServiceAndChooseAccount");
         if (!isGooglePlayServicesAvailable()) {
             acquireGooglePlayServices();
         } else if (mCredential.getSelectedAccountName() == null) {
@@ -177,7 +217,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         } else if (!isDeviceOnline()) {
             tv.setText("No network connection available.");
         } else {
-            //new MakeRequestTask(mCredential).execute();
+            new MakeRequestTask(mCredential).execute();
         }
     }
 
@@ -201,7 +241,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                     .getString(PREF_ACCOUNT_NAME, null);
             if (accountName != null) {
                 mCredential.setSelectedAccountName(accountName);
-                //connectServiceAndChooseAcount();
+                connectServiceAndChooseAccount();
             } else {
                 // Start a dialog from which the user can choose an account
                 startActivityForResult(
@@ -241,7 +281,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                             "This app requires Google Play Services. Please install " +
                                     "Google Play Services on your device and relaunch this app.");
                 } else {
-                    connectServiceAndChooseAcount();
+                    connectServiceAndChooseAccount();
                 }
                 break;
             case REQUEST_ACCOUNT_PICKER:
@@ -255,14 +295,15 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                         SharedPreferences.Editor editor = settings.edit();
                         editor.putString(PREF_ACCOUNT_NAME, accountName);
                         editor.apply();
+                        Log.d("HANK","Select account :"+accountName);
                         mCredential.setSelectedAccountName(accountName);
-                        connectServiceAndChooseAcount();
+                        connectServiceAndChooseAccount();
                     }
                 }
                 break;
             case REQUEST_AUTHORIZATION:
                 if (resultCode == RESULT_OK) {
-                    connectServiceAndChooseAcount();
+                    connectServiceAndChooseAccount();
                 }
                 break;
         }
@@ -433,11 +474,13 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
          */
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
-            try {
-                camera.setPreviewDisplay(previewHolder);
-                camera.setPreviewCallback(previewCallback);
-            } catch (Throwable t) {
-                Log.e("PreviewDemo", "Exception in setPreviewDisplay()", t);
+            if(bEnableCamera) {
+                try {
+                    camera.setPreviewDisplay(previewHolder);
+                    camera.setPreviewCallback(previewCallback);
+                } catch (Throwable t) {
+                    Log.e("PreviewDemo", "Exception in setPreviewDisplay()", t);
+                }
             }
         }
 
@@ -446,15 +489,24 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
          */
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            Camera.Parameters parameters = camera.getParameters();
-            Camera.Size size = getBestPreviewSize(width, height, parameters);
-            if (size != null) {
-                parameters.setPreviewSize(size.width, size.height);
-                Log.d(TAG, "Using width=" + size.width + " height=" + size.height);
+
+
+            if(bEnableCamera) {
+                Camera.Parameters parameters = camera.getParameters();
+                Camera.Size size = getBestPreviewSize(width, height, parameters);
+                if (size != null) {
+                    parameters.setPreviewSize(size.width, size.height);
+                    Log.d(TAG, "Using width=" + size.width + " height=" + size.height);
+                }
+                if (inPreview) {
+                    inPreview = false;
+                    camera.stopPreview();
+                }
+                camera.setParameters(parameters);
+                camera.startPreview();
+                inPreview = true;
             }
-            camera.setParameters(parameters);
-            camera.startPreview();
-            inPreview = true;
+
         }
 
         /**
@@ -463,13 +515,14 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
             // Ignore
+            if(bEnableCamera) {
 
-
-            camera.setPreviewCallback(null);
-            if (inPreview) camera.stopPreview();
-            inPreview = false;
-            camera.release();
-            camera = null;
+                camera.setPreviewCallback(null);
+                if (inPreview) camera.stopPreview();
+                inPreview = false;
+                camera.release();
+                camera = null;
+            }
         }
     };
 
