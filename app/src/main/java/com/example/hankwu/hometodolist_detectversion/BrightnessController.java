@@ -5,7 +5,6 @@ import android.content.ContentResolver;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.provider.Settings;
-import android.speech.tts.TextToSpeech;
 import android.view.Window;
 import android.view.WindowManager;
 
@@ -45,7 +44,7 @@ public class BrightnessController {
         mHandlerThread = new HandlerThread("BrightnessController");
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper());
-        mHandler.post(beLightAmoment);
+        mHandler.post(beLightAMoment);
     }
 
     public void release() {
@@ -53,11 +52,17 @@ public class BrightnessController {
         synchronized (mLock) {
             mLock.notifyAll();
         }
-        mHandler.removeCallbacks(beLightAmoment);
-        mHandlerThread.quit();
+        try {
+            mHandler.removeCallbacks(beLightAMoment);
+            mHandler = null;
+            mHandlerThread.quit();
+            mHandlerThread = null;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    Runnable beLightAmoment = new Runnable() {
+    Runnable beLightAMoment = new Runnable() {
         @Override
         public void run() {
             beDark();
@@ -85,12 +90,14 @@ public class BrightnessController {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                mActivity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        beDark();
-                    }
-                });
+                if(MainActivity.bDetecting) {
+                    mActivity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            beDark();
+                        }
+                    });
+                }
             }
         }
     };

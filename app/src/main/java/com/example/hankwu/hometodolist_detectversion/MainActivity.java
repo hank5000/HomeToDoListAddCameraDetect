@@ -6,6 +6,7 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.hardware.Camera;
@@ -13,17 +14,23 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.speech.tts.TextToSpeech;
 import android.support.annotation.NonNull;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import com.baoyz.swipemenulistview.SwipeMenu;
+import com.baoyz.swipemenulistview.SwipeMenuListView;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.api.client.extensions.android.http.AndroidHttp;
@@ -34,7 +41,16 @@ import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.ExponentialBackOff;
+import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
+import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest;
+import com.google.api.services.sheets.v4.model.CellData;
+import com.google.api.services.sheets.v4.model.ExtendedValue;
+import com.google.api.services.sheets.v4.model.GridCoordinate;
+import com.google.api.services.sheets.v4.model.Request;
+import com.google.api.services.sheets.v4.model.RowData;
+import com.google.api.services.sheets.v4.model.Spreadsheet;
+import com.google.api.services.sheets.v4.model.UpdateCellsRequest;
 import com.google.api.services.sheets.v4.model.ValueRange;
 import com.jwetherell.motion_detection.SensorsActivity;
 import com.jwetherell.motion_detection.data.GlobalData;
@@ -44,6 +60,8 @@ import com.jwetherell.motion_detection.detection.IMotionDetection;
 import com.jwetherell.motion_detection.detection.LumaMotionDetection;
 import com.jwetherell.motion_detection.detection.RgbMotionDetection;
 import com.jwetherell.motion_detection.image.ImageProcessing;
+import com.romainpiel.titanic.library.Titanic;
+import com.romainpiel.titanic.library.TitanicTextView;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -57,6 +75,9 @@ import pub.devrel.easypermissions.EasyPermissions;
 
 public class MainActivity extends SensorsActivity implements EasyPermissions.PermissionCallbacks {
 
+    /*
+        use for detect
+     */
     private static final String TAG = "MotionDetectionActivity";
     private static SurfaceView preview = null;
     private static SurfaceHolder previewHolder = null;
@@ -68,22 +89,40 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     private static volatile AtomicBoolean processing = new AtomicBoolean(false);
     private static TextToSpeech tts = null;
     private boolean bEnableCamera = false;
+    private List<ApplicationInfo> mAppList;
 
+    /*
+        use for to do list
+     */
     GoogleAccountCredential mCredential;
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_AUTHORIZATION = 1001;
     static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
     static final int REQUEST_PERMISSION_GET_ACCOUNTS = 1003;
     private static final String PREF_ACCOUNT_NAME = "accountName";
-    private static final String[] SCOPES = { SheetsScopes.SPREADSHEETS_READONLY };
+    private static final String[] SCOPES = { SheetsScopes.SPREADSHEETS };
 
+    /*
+        UI
+     */
     private Button menuBtn = null;
     private Button accountBtn = null;
     private Button cameraStart = null;
-
+    private TextView loginInfo = null;
+    public static boolean bDetecting = false;
     private TextView tv = null;
-
     private LinearLayout ll = null;
+    private SwipeMenuListView listView = null;
+    private ToDoList toDoList = null;
+    private ToDoList.Adapter mAdapter = null;
+    private ArrayList<ToDoList.ToDoItem> mToDoItemList;
+
+    private TitanicTextView ttv = null;
+    private Titanic titanic = null;
+    private int KEEP_TIME = 5000;
+    private Handler handler = null;
+    private HandlerThread handlerThread = null;
+
     /**
      * {@inheritDoc}
      */
@@ -91,6 +130,30 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+
+
+        ttv = (TitanicTextView) findViewById(R.id.titanic_tv);
+        ttv.setVisibility(View.INVISIBLE);
+        ttv.setTypeface(Typefaces.get(this,"Satisfy-Regular.ttf"));
+        titanic = new Titanic();
+
+        handlerThread = new HandlerThread("Titanic TextView");
+        handlerThread.start();
+        handler = new Handler(handlerThread.getLooper());
+        handler.post(loadingTask);
+
+//        new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                try {
+//                    Thread.sleep(3000);
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
+//                titanic.cancel();
+//            }
+//        }).start();
+
 
         preview = (SurfaceView) findViewById(R.id.preview);
         previewHolder = preview.getHolder();
@@ -105,10 +168,9 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             // Using State based (aggregate map)
             detector = new AggregateLumaMotionDetection();
         }
-
-        brightnessController = new BrightnessController(MainActivity.this);
-        brightnessController.setLightTime(1000);
-
+//
+//        brightnessController = new BrightnessController(MainActivity.this);
+//        brightnessController.setLightTime(1000);
 
         ll = (LinearLayout) findViewById(R.id.list);
 
@@ -120,53 +182,66 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
 
 
 
-        String accountName = getPreferences(Context.MODE_PRIVATE)
-                .getString(PREF_ACCOUNT_NAME, null);
-
         tv = new TextView(this);
 
-//        if(accountName!=null) {
-//            TextView textView = new TextView(this);
-//            ll.addView(textView);
-//
-//            textView.setText("Connect to "+accountName);
-//            mCredential.setSelectedAccountName(accountName);
-//            new MakeRequestTask(mCredential).execute();
-//        } else {
-//            connectBtn = new Button(this);
-//            connectBtn.setOnClickListener(new View.OnClickListener() {
-//                @Override
-//                public void onClick(View v) {
-//                    connectServiceAndChooseAccount();
-//                }
-//            });
-//            ll.addView(connectBtn);
-//        }
 
+        final String accountName = getPreferences(Context.MODE_PRIVATE)
+                .getString(PREF_ACCOUNT_NAME, null);
+
+        if(accountName != null) {
+            mCredential.setSelectedAccountName(accountName);
+            if(isDeviceOnline()) {
+                // request "TODOLIST"
+            }
+        }
+
+
+        loginInfo = (TextView) findViewById(R.id.login);
 
         accountBtn = (Button) findViewById(R.id.account);
-        accountBtn.setOnClickListener(new View.OnClickListener() {
+        runOnUiThread(new Runnable() {
             @Override
-            public void onClick(View v) {
-                connectServiceAndChooseAccount();
+            public void run() {
+                if(accountName==null) {
+                    loginInfo.setText("Please Log In Account");
+                    accountBtn.setText("Set Account");
+                } else {
+                    loginInfo.setText("Log In Account:"+accountName);
+                    accountBtn.setText("Change Account");
+                }
             }
         });
 
+        if(accountName==null) {
+            accountBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    connectServiceAndChooseAccount();
+                }
+            });
+        } else {
+            accountBtn.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    connectServiceAndChooseAccount();
+                    return false;
+                }
+            });
+        }
+
         cameraStart = (Button) findViewById(R.id.Camera);
+        updateDetectButton();
         cameraStart.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                camera = Camera.open(0);
-                camera.setPreviewCallback(previewCallback);
-                try {
-                    camera.setPreviewDisplay(previewHolder);
-                } catch (IOException e) {
-                    e.printStackTrace();
+                if(!bDetecting) {
+                    detectStart();
+                } else {
+                    detectStop();
+                    ttv.setVisibility(View.INVISIBLE);
+                    titanic.cancel();
                 }
-                Camera.Parameters p = camera.getParameters();
-                p.setPreviewSize(640,480);
-                camera.setParameters(p);
-                camera.startPreview();
+                updateDetectButton();
             }
         });
 
@@ -178,20 +253,51 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             }
         });
 
+        mToDoItemList = new ArrayList<>();
+        mToDoItemList.add(new ToDoList.ToDoItem());
+        mAdapter = new ToDoList.Adapter(this,mToDoItemList);
 
+        toDoList = new ToDoList(this);
+
+        listView = (SwipeMenuListView) findViewById(R.id.listView);
+        listView.setMenuCreator(toDoList.getCreator());
+        listView.setOnMenuItemClickListener(new SwipeMenuListView.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(int position, SwipeMenu menu, int index) {
+                switch (index) {
+                    case 0:
+                        // open
+                        break;
+                    case 1:
+                        mToDoItemList.remove(position);
+                        mAdapter.notifyDataSetChanged();
+                        // delete
+                        break;
+                }
+                // false : close the menu; true : not close the menu
+                return false;
+            }
+        });
+
+        // Right
+        listView.setSwipeDirection(SwipeMenuListView.DIRECTION_RIGHT);
+
+        // Left
+        listView.setSwipeDirection(SwipeMenuListView.DIRECTION_LEFT);
+
+        listView.setAdapter(mAdapter);
 
         ll.addView(tv);
-
-//        tv = (TextView) findViewById(R.id.tv);
 
         if(bEnableCamera) {
             camera = Camera.open(0);
         }
+
         tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             @Override
             public void onInit(int status) {
                 if (status != TextToSpeech.ERROR) {
-                    tts.setLanguage(Locale.ENGLISH);
+                    tts.setLanguage(Locale.CHINESE);
                 }
             }
         });
@@ -200,6 +306,63 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
 
     }
 
+    private void detectStart() {
+
+
+        camera = Camera.open(0);
+        camera.setPreviewCallback(previewCallback);
+        try {
+            camera.setPreviewDisplay(previewHolder);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        Camera.Parameters p = camera.getParameters();
+        p.setPreviewSize(320,240);
+        camera.setParameters(p);
+        camera.startPreview();
+        bDetecting = true;
+
+        ttv.setVisibility(View.VISIBLE);
+        titanic.start(ttv);
+    }
+
+    private void detectStop() {
+
+        camera.stopPreview();
+        try {
+            camera.setPreviewCallback(null);
+            camera.setPreviewDisplay(null);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        camera.release();
+        camera = null;
+        bDetecting = false;
+
+        ttv.setVisibility(View.INVISIBLE);
+        titanic.cancel();
+    }
+
+    private void updateDetectButton() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                String cameraBtnText = bDetecting?"Disable Detect":"Enable Detect";
+                cameraStart.setText(cameraBtnText);
+            }
+        });
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if(bDetecting) {
+            detectStop();
+        }
+        bStop = true;
+        mutex.notifyAll();
+
+    }
 
     /**
      * Attempt to call the API, after verifying that all the preconditions are
@@ -209,15 +372,12 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
      * appropriate.
      */
     private void connectServiceAndChooseAccount() {
-        Log.d("HANK","connectServiceAndChooseAccount");
         if (!isGooglePlayServicesAvailable()) {
             acquireGooglePlayServices();
-        } else if (mCredential.getSelectedAccountName() == null) {
-            chooseAccount();
         } else if (!isDeviceOnline()) {
             tv.setText("No network connection available.");
         } else {
-            new MakeRequestTask(mCredential).execute();
+            chooseAccount();
         }
     }
 
@@ -233,21 +393,13 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
      */
     @AfterPermissionGranted(REQUEST_PERMISSION_GET_ACCOUNTS)
     private void chooseAccount() {
-        Log.d("HANK","chooseAccount");
 
         if (EasyPermissions.hasPermissions(
                 this, Manifest.permission.GET_ACCOUNTS)) {
-            String accountName = getPreferences(Context.MODE_PRIVATE)
-                    .getString(PREF_ACCOUNT_NAME, null);
-            if (accountName != null) {
-                mCredential.setSelectedAccountName(accountName);
-                connectServiceAndChooseAccount();
-            } else {
-                // Start a dialog from which the user can choose an account
+
                 startActivityForResult(
                         mCredential.newChooseAccountIntent(),
                         REQUEST_ACCOUNT_PICKER);
-            }
         } else {
             // Request the GET_ACCOUNTS permission via a user dialog
             EasyPermissions.requestPermissions(
@@ -273,7 +425,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     protected void onActivityResult(
             int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        Log.d("HANK","onActivityResult");
         switch(requestCode) {
             case REQUEST_GOOGLE_PLAY_SERVICES:
                 if (resultCode != RESULT_OK) {
@@ -295,9 +446,14 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                         SharedPreferences.Editor editor = settings.edit();
                         editor.putString(PREF_ACCOUNT_NAME, accountName);
                         editor.apply();
-                        Log.d("HANK","Select account :"+accountName);
                         mCredential.setSelectedAccountName(accountName);
-                        connectServiceAndChooseAccount();
+                        final String selectAccount = accountName;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                loginInfo.setText("Log In Account:"+selectAccount);
+                            }
+                        });
                     }
                 }
                 break;
@@ -323,7 +479,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                                            @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        Log.d("HANK","onRequestPermissionsResult");
         EasyPermissions.onRequestPermissionsResult(
                 requestCode, permissions, grantResults, this);
     }
@@ -357,7 +512,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
      * @return true if the device has a network connection, false otherwise.
      */
     private boolean isDeviceOnline() {
-        Log.d("HANK","isDeviceOnline");
         ConnectivityManager connMgr =
                 (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
@@ -370,7 +524,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
      *     date on this device; false otherwise.
      */
     private boolean isGooglePlayServicesAvailable() {
-        Log.d("HANK","isGooglePlayServicesAvailable");
         GoogleApiAvailability apiAvailability =
                 GoogleApiAvailability.getInstance();
         final int connectionStatusCode =
@@ -383,7 +536,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
      * Play Services installation via a user dialog, if possible.
      */
     private void acquireGooglePlayServices() {
-        Log.d("HANK","acquireGooglePlayServices");
 
         GoogleApiAvailability apiAvailability =
                 GoogleApiAvailability.getInstance();
@@ -402,8 +554,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
      */
     void showGooglePlayServicesAvailabilityErrorDialog(
             final int connectionStatusCode) {
-        Log.d("HANK","showGooglePlayServicesAvailabilityErrorDialog");
-
         GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
         Dialog dialog = apiAvailability.getErrorDialog(
                 MainActivity.this,
@@ -411,11 +561,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                 REQUEST_GOOGLE_PLAY_SERVICES);
         dialog.show();
     }
-
-
-
-
-
 
     /**
      * {@inheritDoc}
@@ -433,11 +578,10 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         super.onPause();
 
         tts.shutdown();
-        brightnessController.release();
-        brightnessController = null;
 
     }
-    static final String[] texts = {"I am kelly","Welcome Kelly's home!"};
+
+    static final String[] texts = {"你好","哎文你好"};
 
     /**
      * {@inheritDoc}
@@ -446,7 +590,10 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     public void onResume() {
         super.onResume();
 
+        brightnessController = new BrightnessController(MainActivity.this);
+        brightnessController.setLightTime(KEEP_TIME);
 
+        bStop = false;
     }
 
     private Camera.PreviewCallback previewCallback = new Camera.PreviewCallback() {
@@ -514,6 +661,10 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
          */
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
+            if(bDetecting) {
+                detectStop();
+            }
+
             // Ignore
             if(bEnableCamera) {
 
@@ -621,6 +772,10 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                         }
 
                         brightnessController.lightThenDark();
+                        synchronized (mutex) {
+                            mutex.notifyAll();
+                        }
+
 
 
                     } else {
@@ -638,13 +793,52 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         }
     };
 
+    public static Object mutex = new Object();
+    boolean bStop = false;
 
+    private Runnable loadingTask = new Runnable() {
+        @Override
+        public void run() {
+            while(!bStop) {
+                synchronized (mutex) {
+                    try {
+                        mutex.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        ttv.setVisibility(View.INVISIBLE);
+                        titanic.cancel();
+                    }
+                });
+
+                try {
+                    Thread.sleep(KEEP_TIME);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                if(bDetecting) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            ttv.setVisibility(View.VISIBLE);
+                            titanic.start(ttv);
+                        }
+                    });
+                }
+            }
+
+        }
+    };
 
     /**
      * An asynchronous task that handles the Google Sheets API call.
      * Placing the API calls in their own task ensures the UI stays responsive.
      */
-    private class MakeRequestTask extends AsyncTask<Void, Void, List<String>> {
+    private class MakeRequestTask extends AsyncTask<Void, Void, List<List<Object>>> {
         private com.google.api.services.sheets.v4.Sheets mService = null;
         private Exception mLastError = null;
 
@@ -655,6 +849,8 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                     transport, jsonFactory, credential)
                     .setApplicationName("Google Sheets API Android Quickstart")
                     .build();
+
+
         }
 
         /**
@@ -662,7 +858,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
          * @param params no parameters needed for this task.
          */
         @Override
-        protected List<String> doInBackground(Void... params) {
+        protected List<List<Object>> doInBackground(Void... params) {
             try {
                 return getDataFromApi();
             } catch (Exception e) {
@@ -679,24 +875,63 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
          * @return List of names and majors
          * @throws IOException
          */
-        private List<String> getDataFromApi() throws IOException {
-            String spreadsheetId = "1o4mF8JwHMfhiVfeO1ste1VIsBMNOvKlSanjEYNfj1mE";
-            String range = "A1:B";
-            List<String> results = new ArrayList<String>();
+        String sheetPath = "1o4mF8JwHMfhiVfeO1ste1VIsBMNOvKlSanjEYNfj1mE";
+        String sheetRange = "A2:D";
+
+        private List<List<Object>> getDataFromApi() throws IOException {
+            String spreadsheetId = sheetPath;
+            String range = sheetRange;
+
             ValueRange response = this.mService.spreadsheets().values()
                     .get(spreadsheetId, range)
                     .execute();
+
+
             List<List<Object>> values = response.getValues();
-            if (values != null) {
-                results.add("Name, Major");
-                for (List row : values) {
-                    results.add(row.get(0) + ", " + row.get(1));
-                }
-            }
-            return results;
+
+
+            return values;
         }
 
+        final int STATUS = 0;
+        final int TITLE  = 1;
+        final int GROUP  = 2;
+        final int DEADLINE = 3;
 
+        private void setStatusValueToListIndex(String onoff, int index) {
+            setValueAt(onoff,index,STATUS);
+        }
+
+        private void setValueAt(final String value,final int itemIndex,final int itemTitle) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    List<Request> requests = new ArrayList<>();
+
+                    List<CellData> values = new ArrayList<CellData>();
+                    values.add(new CellData().setUserEnteredValue(new ExtendedValue()
+                            .setStringValue(value)));
+
+                    requests.add(new Request().setUpdateCells(
+                            new UpdateCellsRequest()
+                                    .setStart(new GridCoordinate().setSheetId(0)
+                                            .setColumnIndex(itemTitle)
+                                            .setRowIndex(itemIndex))
+                                    .setRows(Arrays.asList(new RowData().setValues(values)))
+                                    .setFields("userEnteredValue")));
+
+                    BatchUpdateSpreadsheetRequest batchUpdateRequest = new BatchUpdateSpreadsheetRequest()
+                            .setRequests(requests);
+
+                    try {
+                        mService.spreadsheets().batchUpdate(sheetPath,batchUpdateRequest).execute();
+
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+        }
 
         @Override
         protected void onPreExecute() {
@@ -704,12 +939,22 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         }
 
         @Override
-        protected void onPostExecute(List<String> output) {
-            if (output == null || output.size() == 0) {
-                tv.setText("No results returned.");
-            } else {
-                output.add(0, "Data retrieved using the Google Sheets API:");
-                tv.setText(TextUtils.join("\n", output));
+        protected void onPostExecute(List<List<Object>> output) {
+            if(output!=null) {
+                mToDoItemList.clear();
+                int j = 1;
+                for(List<Object> item:output) {
+                    ToDoList.ToDoItem todoItem  = new ToDoList.ToDoItem();
+                    todoItem.mStatus            = item.get(0).toString();
+                    todoItem.mTitle             = item.get(1).toString();
+                    todoItem.mGroup             = item.get(2).toString();
+                    todoItem.mDeadline          = item.get(3).toString();
+                    todoItem.mSheetPosition     = j;
+                    mToDoItemList.add(todoItem);
+                    j++;
+                    Log.d("HANK",todoItem.mStatus+","+todoItem.mTitle+","+todoItem.mGroup+","+todoItem.mDeadline+","+todoItem.mSheetPosition);
+                }
+                mAdapter.notifyDataSetChanged();
             }
         }
 

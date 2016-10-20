@@ -3,6 +3,7 @@
     android:layout_width="fill_parent"
     android:layout_height="fill_parent">
 
+
     <LinearLayout
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
@@ -22,13 +23,10 @@
             android:orientation="vertical"
             android:layout_weight="1">
 
-            <!--<Button android:id="@+id/connect"-->
-                <!--android:layout_height="wrap_content"-->
-                <!--android:layout_width="wrap_content"-->
-                <!--android:text="Connect"/>-->
-            <!--<TextView android:id="@+id/tv"-->
-                <!--android:layout_height="wrap_content"-->
-                <!--android:layout_width="wrap_content"/>-->
+            <com.baoyz.swipemenulistview.SwipeMenuListView
+                android:id="@+id/listView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
 
         </LinearLayout>
 
@@ -58,8 +56,8 @@
         android:layout_alignParentBottom="false"
         android:layout_alignParentRight="false"
         android:layout_alignWithParentIfMissing="false"
-        android:layout_alignLeft="@id/menu"
-        android:layout_above="@id/menu" />
+        android:layout_toLeftOf="@+id/menu"
+        android:layout_alignTop="@+id/menu" />
 
     <Button
         android:layout_width="wrap_content"
@@ -74,8 +72,27 @@
         android:layout_alignParentBottom="false"
         android:layout_alignParentRight="false"
         android:layout_alignWithParentIfMissing="false"
-        android:layout_alignLeft="@id/account"
-        android:layout_above="@id/account" />
+        android:layout_alignTop="@+id/account"
+        android:layout_toLeftOf="@+id/account" />
+
+
+    <TextView android:layout_height="wrap_content"
+        android:layout_width="wrap_content"
+        android:layout_alignParentRight="true"
+        android:text="Login information"
+        android:id="@+id/login"/>
+
+
+    <com.romainpiel.titanic.library.TitanicTextView
+        android:id="@+id/titanic_tv"
+        android:text="To Do List"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:textColor="#212121"
+        android:textAlignment="center"
+        android:gravity="center"
+        android:background="@android:color/black"
+        android:textSize="200px"/>
 
 
 

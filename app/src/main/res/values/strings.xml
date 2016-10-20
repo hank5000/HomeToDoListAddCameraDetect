@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">HomeToDoList_DetectVersion</string>
+    <string name="loading">Loading</string>
 </resources>
