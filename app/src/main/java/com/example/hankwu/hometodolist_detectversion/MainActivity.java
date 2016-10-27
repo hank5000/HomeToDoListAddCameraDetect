@@ -13,6 +13,7 @@ import android.hardware.Camera;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -23,6 +24,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -31,6 +33,8 @@ import android.widget.Toast;
 
 import com.baoyz.swipemenulistview.SwipeMenu;
 import com.baoyz.swipemenulistview.SwipeMenuListView;
+import com.getbase.floatingactionbutton.FloatingActionButton;
+import com.getbase.floatingactionbutton.FloatingActionsMenu;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.api.client.extensions.android.http.AndroidHttp;
@@ -89,12 +93,11 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     private static volatile AtomicBoolean processing = new AtomicBoolean(false);
     private static TextToSpeech tts = null;
     private boolean bEnableCamera = false;
-    private List<ApplicationInfo> mAppList;
 
     /*
         use for to do list
      */
-    GoogleAccountCredential mCredential;
+    static GoogleAccountCredential mCredential;
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_AUTHORIZATION = 1001;
     static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
@@ -122,14 +125,62 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     private int KEEP_TIME = 5000;
     private Handler handler = null;
     private HandlerThread handlerThread = null;
-
+    FloatingActionButton actionB = null;
     /**
      * {@inheritDoc}
      */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+//        if (Build.VERSION.SDK_INT < 16) {
+//            getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+//                    WindowManager.LayoutParams.FLAG_FULLSCREEN);
+//        }
+//
+//        View decorView = getWindow().getDecorView();
+//        // Hide both the navigation bar and the status bar.
+//        // SYSTEM_UI_FLAG_FULLSCREEN is only available on Android 4.1 and higher, but as
+//        // a general rule, you should design your app to hide the status bar whenever you
+//        // hide the navigation bar.
+//        int uiOptions = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+//                | View.SYSTEM_UI_FLAG_FULLSCREEN;
+//        decorView.setSystemUiVisibility(uiOptions);
+
         setContentView(R.layout.main);
+
+
+        actionB = (FloatingActionButton) findViewById(R.id.action_b);
+
+        FloatingActionButton actionC = new FloatingActionButton(getBaseContext());
+        actionC.setTitle("Hide/Show Action above");
+        actionC.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                actionB.setVisibility(actionB.getVisibility() == View.GONE ? View.VISIBLE : View.GONE);
+            }
+        });
+
+        final FloatingActionsMenu menuMultipleActions = (FloatingActionsMenu) findViewById(R.id.multiple_actions);
+        menuMultipleActions.addButton(actionC);
+
+
+        final FloatingActionButton actionA = (FloatingActionButton) findViewById(R.id.action_a);
+        actionA.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                if(!bDetecting) {
+                    detectStart();
+                    actionA.setTitle("Click to Disable Motion Detect");
+                } else {
+                    detectStop();
+                    ttv.setVisibility(View.INVISIBLE);
+                    titanic.cancel();
+                    actionA.setTitle("Click to Enable Motion Detect");
+                }
+                updateDetectButton();
+            }
+        });
 
 
         ttv = (TitanicTextView) findViewById(R.id.titanic_tv);
@@ -141,19 +192,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         handlerThread.start();
         handler = new Handler(handlerThread.getLooper());
         handler.post(loadingTask);
-
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                try {
-//                    Thread.sleep(3000);
-//                } catch (InterruptedException e) {
-//                    e.printStackTrace();
-//                }
-//                titanic.cancel();
-//            }
-//        }).start();
-
 
         preview = (SurfaceView) findViewById(R.id.preview);
         previewHolder = preview.getHolder();
@@ -168,22 +206,15 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             // Using State based (aggregate map)
             detector = new AggregateLumaMotionDetection();
         }
-//
-//        brightnessController = new BrightnessController(MainActivity.this);
-//        brightnessController.setLightTime(1000);
 
         ll = (LinearLayout) findViewById(R.id.list);
-
 
         // Initialize credentials and service object.
         mCredential = GoogleAccountCredential.usingOAuth2(
                 getApplicationContext(), Arrays.asList(SCOPES))
                 .setBackOff(new ExponentialBackOff());
 
-
-
         tv = new TextView(this);
-
 
         final String accountName = getPreferences(Context.MODE_PRIVATE)
                 .getString(PREF_ACCOUNT_NAME, null);
@@ -192,9 +223,9 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             mCredential.setSelectedAccountName(accountName);
             if(isDeviceOnline()) {
                 // request "TODOLIST"
+                new MakeRequestTask(mCredential).execute();
             }
         }
-
 
         loginInfo = (TextView) findViewById(R.id.login);
 
@@ -205,22 +236,27 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                 if(accountName==null) {
                     loginInfo.setText("Please Log In Account");
                     accountBtn.setText("Set Account");
+                    actionB.setTitle("Please Log In Account");
                 } else {
                     loginInfo.setText("Log In Account:"+accountName);
                     accountBtn.setText("Change Account");
+                    actionB.setTitle("Log In Account:"+accountName+"\nChange Account");
+
                 }
             }
         });
+        accountBtn.setVisibility(View.INVISIBLE);
 
         if(accountName==null) {
-            accountBtn.setOnClickListener(new View.OnClickListener() {
+            actionB.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     connectServiceAndChooseAccount();
                 }
             });
+
         } else {
-            accountBtn.setOnLongClickListener(new View.OnLongClickListener() {
+            actionB.setOnLongClickListener(new View.OnLongClickListener() {
                 @Override
                 public boolean onLongClick(View v) {
                     connectServiceAndChooseAccount();
@@ -244,6 +280,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                 updateDetectButton();
             }
         });
+        cameraStart.setVisibility(View.INVISIBLE);
 
         menuBtn = (Button) findViewById(R.id.menu);
         menuBtn.setOnClickListener(new View.OnClickListener() {
@@ -252,6 +289,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                 new MakeRequestTask(mCredential).execute();
             }
         });
+        menuBtn.setVisibility(View.INVISIBLE);
 
         mToDoItemList = new ArrayList<>();
         mToDoItemList.add(new ToDoList.ToDoItem());
@@ -279,11 +317,11 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             }
         });
 
-        // Right
-        listView.setSwipeDirection(SwipeMenuListView.DIRECTION_RIGHT);
-
-        // Left
-        listView.setSwipeDirection(SwipeMenuListView.DIRECTION_LEFT);
+//        // Right
+//        listView.setSwipeDirection(SwipeMenuListView.DIRECTION_RIGHT);
+//
+//        // Left
+//        listView.setSwipeDirection(SwipeMenuListView.DIRECTION_LEFT);
 
         listView.setAdapter(mAdapter);
 
@@ -292,6 +330,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         if(bEnableCamera) {
             camera = Camera.open(0);
         }
+
 
         tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             @Override
@@ -302,28 +341,39 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             }
         });
 
-
+        brightnessController = new BrightnessController(MainActivity.this);
+        brightnessController.setLightTime(KEEP_TIME);
 
     }
 
     private void detectStart() {
+        int cameraCount = 0;
+        Camera.CameraInfo cameraInfo = new Camera.CameraInfo();
+        cameraCount = Camera.getNumberOfCameras();
+        for(int camIdx = 0; camIdx < cameraCount; camIdx++) {
+            Camera.getCameraInfo(camIdx,cameraInfo);
+            if(cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+                camera = Camera.open(1);
+                camera.setPreviewCallback(previewCallback);
+                try {
+                    camera.setPreviewDisplay(previewHolder);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                Camera.Parameters p = camera.getParameters();
+                p.setPreviewSize(320,240);
+                camera.setParameters(p);
+                camera.startPreview();
+                bDetecting = true;
+
+                ttv.setVisibility(View.INVISIBLE);
+                titanic.start(ttv);
 
 
-        camera = Camera.open(0);
-        camera.setPreviewCallback(previewCallback);
-        try {
-            camera.setPreviewDisplay(previewHolder);
-        } catch (IOException e) {
-            e.printStackTrace();
+            }
         }
-        Camera.Parameters p = camera.getParameters();
-        p.setPreviewSize(320,240);
-        camera.setParameters(p);
-        camera.startPreview();
-        bDetecting = true;
 
-        ttv.setVisibility(View.VISIBLE);
-        titanic.start(ttv);
+
     }
 
     private void detectStop() {
@@ -438,7 +488,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             case REQUEST_ACCOUNT_PICKER:
                 if (resultCode == RESULT_OK && data != null &&
                         data.getExtras() != null) {
-                    String accountName =
+                    final String accountName =
                             data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
                     if (accountName != null) {
                         SharedPreferences settings =
@@ -452,6 +502,15 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                             @Override
                             public void run() {
                                 loginInfo.setText("Log In Account:"+selectAccount);
+                                actionB.setTitle("Log In Account:"+selectAccount +"\nChange Account");
+                                actionB.setOnClickListener(null);
+                                actionB.setOnLongClickListener(new View.OnLongClickListener() {
+                                    @Override
+                                    public boolean onLongClick(View v) {
+                                        connectServiceAndChooseAccount();
+                                        return false;
+                                    }
+                                });
                             }
                         });
                     }
@@ -577,11 +636,15 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     public void onPause() {
         super.onPause();
 
-        tts.shutdown();
+        //tts.shutdown();
 
     }
 
-    static final String[] texts = {"你好","哎文你好"};
+
+    static final String[] english_texts = {"Hello"};
+    static final String[] chinese_texts = {"你好"};
+    static final String[] texts = null;
+
 
     /**
      * {@inheritDoc}
@@ -590,8 +653,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     public void onResume() {
         super.onResume();
 
-        brightnessController = new BrightnessController(MainActivity.this);
-        brightnessController.setLightTime(KEEP_TIME);
 
         bStop = false;
     }
@@ -636,8 +697,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
          */
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-
-
             if(bEnableCamera) {
                 Camera.Parameters parameters = camera.getParameters();
                 Camera.Size size = getBestPreviewSize(width, height, parameters);
@@ -653,7 +712,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                 camera.startPreview();
                 inPreview = true;
             }
-
         }
 
         /**
@@ -667,7 +725,6 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
 
             // Ignore
             if(bEnableCamera) {
-
                 camera.setPreviewCallback(null);
                 if (inPreview) camera.stopPreview();
                 inPreview = false;
@@ -696,6 +753,11 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
         return result;
     }
     static int i =0;
+
+
+//    private static void onMotionDetected() {
+//        new MakeRequestTask(mCredential).execute();
+//    }
 
     private static final class DetectionThread extends Thread {
 
@@ -765,19 +827,15 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                             else bitmap = ImageProcessing.lumaToGreyscale(img, width, height);
                         }
 
-                        tts.speak(texts[i], TextToSpeech.QUEUE_FLUSH, null);
+                        tts.speak(chinese_texts[i], TextToSpeech.QUEUE_FLUSH, null);
                         i++;
-                        if(i==texts.length) {
+                        if(i==chinese_texts.length) {
                             i = 0;
                         }
-
                         brightnessController.lightThenDark();
                         synchronized (mutex) {
                             mutex.notifyAll();
                         }
-
-
-
                     } else {
                         //Log.i(TAG, "Not taking picture because not enough time has passed since the creation of the Surface");
                     }
@@ -892,46 +950,46 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
 
             return values;
         }
-
-        final int STATUS = 0;
-        final int TITLE  = 1;
-        final int GROUP  = 2;
-        final int DEADLINE = 3;
-
-        private void setStatusValueToListIndex(String onoff, int index) {
-            setValueAt(onoff,index,STATUS);
-        }
-
-        private void setValueAt(final String value,final int itemIndex,final int itemTitle) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    List<Request> requests = new ArrayList<>();
-
-                    List<CellData> values = new ArrayList<CellData>();
-                    values.add(new CellData().setUserEnteredValue(new ExtendedValue()
-                            .setStringValue(value)));
-
-                    requests.add(new Request().setUpdateCells(
-                            new UpdateCellsRequest()
-                                    .setStart(new GridCoordinate().setSheetId(0)
-                                            .setColumnIndex(itemTitle)
-                                            .setRowIndex(itemIndex))
-                                    .setRows(Arrays.asList(new RowData().setValues(values)))
-                                    .setFields("userEnteredValue")));
-
-                    BatchUpdateSpreadsheetRequest batchUpdateRequest = new BatchUpdateSpreadsheetRequest()
-                            .setRequests(requests);
-
-                    try {
-                        mService.spreadsheets().batchUpdate(sheetPath,batchUpdateRequest).execute();
-
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }).start();
-        }
+//
+//        final int STATUS = 0;
+//        final int TITLE  = 1;
+//        final int GROUP  = 2;
+//        final int DEADLINE = 3;
+//
+//        private void setStatusValueToListIndex(String onoff, int index) {
+//            setValueAt(onoff,index,STATUS);
+//        }
+//
+//        private void setValueAt(final String value,final int itemIndex,final int itemTitle) {
+//            new Thread(new Runnable() {
+//                @Override
+//                public void run() {
+//                    List<Request> requests = new ArrayList<>();
+//                    List<CellData> values = new ArrayList<CellData>();
+//
+//                    values.add(new CellData().setUserEnteredValue(new ExtendedValue()
+//                            .setStringValue(value)));
+//
+//                    requests.add(new Request().setUpdateCells(
+//                                    new UpdateCellsRequest()
+//                                        .setStart(new GridCoordinate().setSheetId(0)
+//                                            .setColumnIndex(itemTitle)
+//                                            .setRowIndex(itemIndex))
+//                                        .setRows(Arrays.asList(new RowData().setValues(values)))
+//                                        .setFields("userEnteredValue")));
+//
+//                    BatchUpdateSpreadsheetRequest batchUpdateRequest = new BatchUpdateSpreadsheetRequest()
+//                            .setRequests(requests);
+//
+//                    try {
+//                        mService.spreadsheets().batchUpdate(sheetPath,batchUpdateRequest).execute();
+//
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            }).start();
+//        }
 
         @Override
         protected void onPreExecute() {
@@ -952,7 +1010,7 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                     todoItem.mSheetPosition     = j;
                     mToDoItemList.add(todoItem);
                     j++;
-                    Log.d("HANK",todoItem.mStatus+","+todoItem.mTitle+","+todoItem.mGroup+","+todoItem.mDeadline+","+todoItem.mSheetPosition);
+                    Log.d(TAG,todoItem.mStatus+","+todoItem.mTitle+","+todoItem.mGroup+","+todoItem.mDeadline+","+todoItem.mSheetPosition);
                 }
                 mAdapter.notifyDataSetChanged();
             }

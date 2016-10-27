@@ -3,6 +3,7 @@ package com.example.hankwu.hometodolist_detectversion;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.util.TypedValue;
 import android.view.View;
@@ -13,6 +14,7 @@ import android.widget.ListAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.amulyakhare.textdrawable.TextDrawable;
 import com.baoyz.swipemenulistview.SwipeMenu;
 import com.baoyz.swipemenulistview.SwipeMenuCreator;
 import com.baoyz.swipemenulistview.SwipeMenuItem;
@@ -73,31 +75,45 @@ public class ToDoList {
             SwipeMenuItem openItem = new SwipeMenuItem(
                     mAct.getApplicationContext());
             // set item background
-            openItem.setBackground(new ColorDrawable(Color.rgb(0xC9, 0xC9,
-                    0xCE)));
-            // set item width
-            openItem.setWidth(dp2px(mAct,90));
-            // set item title
-            openItem.setTitle("Open");
-            // set item title fontsize
-            openItem.setTitleSize(18);
-            // set item title font color
-            openItem.setTitleColor(Color.WHITE);
+
+            TextDrawable drawable = TextDrawable.builder()
+                    .beginConfig()
+                    .withBorder(5)
+                    .endConfig()
+                    .buildRect("完",mAct.getResources().getColor(R.color.Done));
+
+            openItem.setBackground(drawable);
+//            // set item width
+            openItem.setWidth(dp2px(mAct,100));
+//            // set item title
+//            openItem.setTitle("Done");
+//            // set item title fontsize
+//            openItem.setTitleSize(18);
+//            // set item title font color
+//            openItem.setTitleColor(Color.WHITE);
             // add to menu
+
             menu.addMenuItem(openItem);
 
             // create "delete" item
-            SwipeMenuItem deleteItem = new SwipeMenuItem(
+            SwipeMenuItem laterItem = new SwipeMenuItem(
                     mAct.getApplicationContext());
+
+            TextDrawable drawable2 = TextDrawable.builder()
+                    .beginConfig()
+                    .withBorder(5)
+                    .endConfig()
+                    .buildRect("遲",mAct.getResources().getColor(R.color.Later));
+
             // set item background
-            deleteItem.setBackground(new ColorDrawable(Color.rgb(0xF9,
-                    0x3F, 0x25)));
-            // set item width
-            deleteItem.setWidth(dp2px(mAct,90));
-            // set a icon
-            deleteItem.setIcon(R.drawable.ic_delete);
-            // add to menu
-            menu.addMenuItem(deleteItem);
+            laterItem.setBackground(drawable2);
+            laterItem.setWidth(dp2px(mAct,100));
+//            laterItem.setTitle("Later");
+//            laterItem.setTitleSize(18);
+//            laterItem.setTitleColor(Color.WHITE);
+
+            // set item width// add to menu
+            menu.addMenuItem(laterItem);
         }
     }
 
@@ -136,10 +152,16 @@ public class ToDoList {
             ViewHolder holder = (ViewHolder) convertView.getTag();
             ToDoList.ToDoItem item = getItem(position);
 
-            holder.iv_icon.setImageResource(R.drawable.ic_delete);
-            holder.tv_name.setText(item.mTitle);
+            TextDrawable drawable = TextDrawable.builder()
+                    .beginConfig()
+                        .withBorder(4)
+                    .endConfig()
+                    .buildRound(item.mGroup.substring(0,1),getGroupColor(item.mGroup));
 
-            holder.iv_icon.setOnClickListener(new View.OnClickListener() {
+            holder.group_icon.setImageDrawable(drawable);
+            holder.title.setText(item.mTitle);
+            holder.deadline.setText(item.mDeadline);
+            holder.group_icon.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     // control items
@@ -147,7 +169,7 @@ public class ToDoList {
                 }
             });
 
-            holder.tv_name.setOnClickListener(new View.OnClickListener() {
+            holder.title.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     // control items
@@ -159,12 +181,14 @@ public class ToDoList {
         }
 
         class ViewHolder {
-            ImageView iv_icon;
-            TextView tv_name;
+            ImageView group_icon;
+            TextView title;
+            TextView deadline;
 
             public ViewHolder(View view) {
-                iv_icon = (ImageView) view.findViewById(R.id.iv_icon);
-                tv_name = (TextView) view.findViewById(R.id.tv_name);
+                group_icon = (ImageView) view.findViewById(R.id.group_icon);
+                title = (TextView) view.findViewById(R.id.title);
+                deadline = (TextView) view.findViewById(R.id.deadline);
                 view.setTag(this);
             }
         }
@@ -175,5 +199,26 @@ public class ToDoList {
             }
             return true;
         }
+
+        public int getGroupColor(String group) {
+            int c = Color.rgb(0x28,0x66,0x61);
+            switch (group.substring(0,1)) {
+                case "家":
+                case "F":
+                case "H":
+                    c = Color.rgb(0x03,0x3f,0x63);
+                    break;
+                case "工":
+                case "W":
+                    c = Color.rgb(0xA3,0x00,0x36);
+                    break;
+                case "私":
+                case "P":
+                    c = Color.rgb(0xA8,0xC2,0x56);
+                    break;
+            }
+            return c;
+        }
+
     }
 }
