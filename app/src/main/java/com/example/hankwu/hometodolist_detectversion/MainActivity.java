@@ -6,14 +6,17 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -23,14 +26,11 @@ import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
+import com.amulyakhare.textdrawable.TextDrawable;
 import com.baoyz.swipemenulistview.SwipeMenu;
 import com.baoyz.swipemenulistview.SwipeMenuListView;
 import com.getbase.floatingactionbutton.FloatingActionButton;
@@ -45,16 +45,7 @@ import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.ExponentialBackOff;
-import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
-import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest;
-import com.google.api.services.sheets.v4.model.CellData;
-import com.google.api.services.sheets.v4.model.ExtendedValue;
-import com.google.api.services.sheets.v4.model.GridCoordinate;
-import com.google.api.services.sheets.v4.model.Request;
-import com.google.api.services.sheets.v4.model.RowData;
-import com.google.api.services.sheets.v4.model.Spreadsheet;
-import com.google.api.services.sheets.v4.model.UpdateCellsRequest;
 import com.google.api.services.sheets.v4.model.ValueRange;
 import com.jwetherell.motion_detection.SensorsActivity;
 import com.jwetherell.motion_detection.data.GlobalData;
@@ -126,6 +117,9 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
     private Handler handler = null;
     private HandlerThread handlerThread = null;
     FloatingActionButton actionB = null;
+    public boolean bTTS = true;
+
+
     /**
      * {@inheritDoc}
      */
@@ -148,40 +142,65 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
 
         setContentView(R.layout.main);
 
-
         actionB = (FloatingActionButton) findViewById(R.id.action_b);
 
-        FloatingActionButton actionC = new FloatingActionButton(getBaseContext());
+        final FloatingActionButton action_refreshtodo = new FloatingActionButton(getBaseContext());
+        action_refreshtodo.setTitle("Refresh List");
+        action_refreshtodo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                new MakeRequestTask(mCredential).execute();
+            }
+        });
+
+        final FloatingActionButton action_tts_switch = new FloatingActionButton(getBaseContext());
+        action_tts_switch.setTitle("Speech Switch");
+        action_tts_switch.setIcon(R.drawable.checked);
+        action_tts_switch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                bTTS = bTTS?false:true;
+                if(bTTS)
+                    action_tts_switch.setIcon(R.drawable.checked);
+                else
+                    action_tts_switch.setIcon(R.drawable.cancel);
+            }
+        });
+
+        final FloatingActionButton actionC = new FloatingActionButton(getBaseContext());
         actionC.setTitle("Hide/Show Action above");
         actionC.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 actionB.setVisibility(actionB.getVisibility() == View.GONE ? View.VISIBLE : View.GONE);
+                action_tts_switch.setVisibility(action_tts_switch.getVisibility() == View.GONE ? View.VISIBLE : View.GONE);
+                action_refreshtodo.setVisibility(action_refreshtodo.getVisibility() == View.GONE ? View.VISIBLE : View.GONE);
             }
         });
 
         final FloatingActionsMenu menuMultipleActions = (FloatingActionsMenu) findViewById(R.id.multiple_actions);
+
+        menuMultipleActions.addButton(action_refreshtodo);
+        menuMultipleActions.addButton(action_tts_switch);
         menuMultipleActions.addButton(actionC);
 
-
         final FloatingActionButton actionA = (FloatingActionButton) findViewById(R.id.action_a);
+        actionA.setIcon(R.drawable.cancel);
         actionA.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
                 if(!bDetecting) {
                     detectStart();
-                    actionA.setTitle("Click to Disable Motion Detect");
+                    actionA.setIcon(R.drawable.checked);
                 } else {
                     detectStop();
                     ttv.setVisibility(View.INVISIBLE);
                     titanic.cancel();
-                    actionA.setTitle("Click to Enable Motion Detect");
+                    actionA.setIcon(R.drawable.cancel);
                 }
                 updateDetectButton();
             }
         });
-
 
         ttv = (TitanicTextView) findViewById(R.id.titanic_tv);
         ttv.setVisibility(View.INVISIBLE);
@@ -827,11 +846,11 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
                             else bitmap = ImageProcessing.lumaToGreyscale(img, width, height);
                         }
 
-                        tts.speak(chinese_texts[i], TextToSpeech.QUEUE_FLUSH, null);
-                        i++;
-                        if(i==chinese_texts.length) {
-                            i = 0;
-                        }
+//                        tts.speak(chinese_texts[i], TextToSpeech.QUEUE_FLUSH, null);
+//                        i++;
+//                        if(i==chinese_texts.length) {
+//                            i = 0;
+//                        }
                         brightnessController.lightThenDark();
                         synchronized (mutex) {
                             mutex.notifyAll();
@@ -1001,18 +1020,68 @@ public class MainActivity extends SensorsActivity implements EasyPermissions.Per
             if(output!=null) {
                 mToDoItemList.clear();
                 int j = 1;
-                for(List<Object> item:output) {
-                    ToDoList.ToDoItem todoItem  = new ToDoList.ToDoItem();
-                    todoItem.mStatus            = item.get(0).toString();
-                    todoItem.mTitle             = item.get(1).toString();
-                    todoItem.mGroup             = item.get(2).toString();
-                    todoItem.mDeadline          = item.get(3).toString();
-                    todoItem.mSheetPosition     = j;
-                    mToDoItemList.add(todoItem);
+                for (List<Object> item : output) {
+                    if (!item.get(0).toString().toLowerCase().contains("done")
+                            && !item.get(0).toString().toLowerCase().contains("complete")
+                            && !item.get(0).toString().toLowerCase().contains("完成")
+                            && !item.get(0).toString().toLowerCase().contains("解決")) {
+                        ToDoList.ToDoItem todoItem = new ToDoList.ToDoItem();
+                        todoItem.mStatus = item.get(0).toString();
+                        todoItem.mTitle = item.get(1).toString();
+                        todoItem.mGroup = item.get(2).toString();
+                        todoItem.mDeadline = item.get(3).toString();
+                        todoItem.mSheetPosition = j;
+                        mToDoItemList.add(todoItem);
+                        Log.d(TAG, todoItem.mStatus + "," + todoItem.mTitle + "," + todoItem.mGroup + "," + todoItem.mDeadline + "," + todoItem.mSheetPosition);
+                    }
                     j++;
-                    Log.d(TAG,todoItem.mStatus+","+todoItem.mTitle+","+todoItem.mGroup+","+todoItem.mDeadline+","+todoItem.mSheetPosition);
+
+                    mAdapter.notifyDataSetChanged();
                 }
-                mAdapter.notifyDataSetChanged();
+                if(bTTS && !tts.isSpeaking()) {
+                    ttsSpeakTasks(mToDoItemList);
+                }
+            }
+        }
+
+        boolean bWait = false;
+        long waitSec = 1000*1000*10;
+
+        private synchronized void ttsSpeakTasks (ArrayList<ToDoList.ToDoItem> list) {
+            if(!bWait) {
+                bWait = true;
+                tts.speak("您有 " + list.size() + " 個事項", TextToSpeech.QUEUE_ADD, null);
+                int i = 1;
+                for (ToDoList.ToDoItem item : list) {
+                    tts.speak("事項" + i, TextToSpeech.QUEUE_ADD, null);
+
+                    String[] titles = item.mTitle.split("\"");
+                    int j = 0;
+                    for (String t : titles) {
+                        int a = (int) t.charAt(0);
+                        if (a > 256) tts.setLanguage(Locale.CHINESE);
+                        else tts.setLanguage(Locale.ENGLISH);
+
+                        tts.speak(t, TextToSpeech.QUEUE_ADD, null);
+                    }
+
+                    tts.setLanguage(Locale.CHINESE);
+                    tts.speak(",狀態:" + item.mStatus + ",截止時間:" + item.mDeadline, TextToSpeech.QUEUE_ADD, null);
+                    i++;
+                }
+                tts.speak("報告完畢", TextToSpeech.QUEUE_ADD, null);
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Thread.sleep(waitSec, 0);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        bWait = false;
+                    }
+                }).start();
             }
         }
 

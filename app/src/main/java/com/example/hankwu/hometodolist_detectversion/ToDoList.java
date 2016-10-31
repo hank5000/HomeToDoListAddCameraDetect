@@ -72,48 +72,48 @@ public class ToDoList {
         @Override
         public void create(SwipeMenu menu) {
             // create "open" item
-            SwipeMenuItem openItem = new SwipeMenuItem(
-                    mAct.getApplicationContext());
-            // set item background
-
-            TextDrawable drawable = TextDrawable.builder()
-                    .beginConfig()
-                    .withBorder(5)
-                    .endConfig()
-                    .buildRect("完",mAct.getResources().getColor(R.color.Done));
-
-            openItem.setBackground(drawable);
-//            // set item width
-            openItem.setWidth(dp2px(mAct,100));
-//            // set item title
-//            openItem.setTitle("Done");
-//            // set item title fontsize
-//            openItem.setTitleSize(18);
-//            // set item title font color
-//            openItem.setTitleColor(Color.WHITE);
-            // add to menu
-
-            menu.addMenuItem(openItem);
-
-            // create "delete" item
-            SwipeMenuItem laterItem = new SwipeMenuItem(
-                    mAct.getApplicationContext());
-
-            TextDrawable drawable2 = TextDrawable.builder()
-                    .beginConfig()
-                    .withBorder(5)
-                    .endConfig()
-                    .buildRect("遲",mAct.getResources().getColor(R.color.Later));
-
-            // set item background
-            laterItem.setBackground(drawable2);
-            laterItem.setWidth(dp2px(mAct,100));
-//            laterItem.setTitle("Later");
-//            laterItem.setTitleSize(18);
-//            laterItem.setTitleColor(Color.WHITE);
-
-            // set item width// add to menu
-            menu.addMenuItem(laterItem);
+//            SwipeMenuItem openItem = new SwipeMenuItem(
+//                    mAct.getApplicationContext());
+//            // set item background
+//
+//            TextDrawable drawable = TextDrawable.builder()
+//                    .beginConfig()
+//                    .withBorder(5)
+//                    .endConfig()
+//                    .buildRect("完",mAct.getResources().getColor(R.color.Done));
+//
+//            openItem.setBackground(drawable);
+////            // set item width
+//            openItem.setWidth(dp2px(mAct,100));
+////            // set item title
+////            openItem.setTitle("Done");
+////            // set item title fontsize
+////            openItem.setTitleSize(18);
+////            // set item title font color
+////            openItem.setTitleColor(Color.WHITE);
+//            // add to menu
+//
+//            menu.addMenuItem(openItem);
+//
+//            // create "delete" item
+//            SwipeMenuItem laterItem = new SwipeMenuItem(
+//                    mAct.getApplicationContext());
+//
+//            TextDrawable drawable2 = TextDrawable.builder()
+//                    .beginConfig()
+//                    .withBorder(5)
+//                    .endConfig()
+//                    .buildRect("遲",mAct.getResources().getColor(R.color.Later));
+//
+//            // set item background
+//            laterItem.setBackground(drawable2);
+//            laterItem.setWidth(dp2px(mAct,100));
+////            laterItem.setTitle("Later");
+////            laterItem.setTitleSize(18);
+////            laterItem.setTitleColor(Color.WHITE);
+//
+//            // set item width// add to menu
+//            menu.addMenuItem(laterItem);
         }
     }
 
@@ -152,9 +152,10 @@ public class ToDoList {
             ViewHolder holder = (ViewHolder) convertView.getTag();
             ToDoList.ToDoItem item = getItem(position);
 
-            TextDrawable drawable = TextDrawable.builder()
+            MaluProgressText drawable = MaluProgressText.builder()
                     .beginConfig()
-                        .withBorder(4)
+                        .withBorder(5)
+                        .progress(28)// 28%
                     .endConfig()
                     .buildRound(item.mGroup.substring(0,1),getGroupColor(item.mGroup));
 
